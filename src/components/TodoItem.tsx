@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
+import type { KeyboardEvent } from "react";
 import type { Todo } from "../types/todo";
 import { suggestDescription } from "../services/ai";
 
@@ -9,29 +10,75 @@ type TodoItemProps = {
   todo: Todo;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, changes: { description: string }) => void;
+  onUpdate: (id: string, changes: Partial<Pick<Todo, "content" | "description">>) => void;
 };
 
 export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id });
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(todo.description);
+  const [descriptionDraft, setDescriptionDraft] = useState(todo.description);
+  const [titleDraft, setTitleDraft] = useState(todo.content);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setDraft(todo.description);
+    setDescriptionDraft(todo.description);
   }, [todo.description]);
 
-  const handleSave = () => {
-    onUpdate(todo.id, { description: draft.trim() });
+  useEffect(() => {
+    setTitleDraft(todo.content);
+  }, [todo.content]);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [isEditingTitle]);
+
+  const handleSaveDescription = () => {
+    onUpdate(todo.id, { description: descriptionDraft.trim() });
     setAiError(null);
   };
 
-  const handleCancel = () => {
-    setDraft(todo.description);
+  const handleCancelDescription = () => {
+    setDescriptionDraft(todo.description);
     setOpen(false);
     setAiError(null);
+  };
+
+  const handleStartTitleEdit = () => {
+    setIsEditingTitle(true);
+  };
+
+  const handleCancelTitleEdit = () => {
+    setTitleDraft(todo.content);
+    setIsEditingTitle(false);
+  };
+
+  const handleConfirmTitleEdit = () => {
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      setTitleDraft(todo.content);
+      setIsEditingTitle(false);
+      return;
+    }
+    if (trimmed !== todo.content) {
+      onUpdate(todo.id, { content: trimmed });
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleConfirmTitleEdit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancelTitleEdit();
+    }
   };
 
   const handleSuggest = async () => {
@@ -39,7 +86,7 @@ export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) 
     try {
       setAiLoading(true);
       const suggestion = await suggestDescription(todo.content);
-      setDraft(suggestion);
+      setDescriptionDraft(suggestion);
       setOpen(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Não foi possível gerar a sugestão.";
@@ -74,20 +121,62 @@ export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) 
         </button>
         <div className="flex flex-1 flex-col gap-2">
           <div className="flex items-start justify-between gap-3">
-            <p
-              className={clsx(
-                "text-base text-slate-100 transition",
-                todo.completed ? "text-slate-500 line-through" : "",
-              )}
-            >
-              {todo.content}
-            </p>
+            {isEditingTitle ? (
+              <input
+                ref={titleInputRef}
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={handleConfirmTitleEdit}
+                onKeyDown={handleTitleKeyDown}
+                maxLength={160}
+                className={clsx(
+                  "w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-base text-slate-100 outline-none",
+                  "focus:border-primary",
+                )}
+                aria-label="Editar título da tarefa"
+              />
+            ) : (
+              <p
+                onDoubleClick={handleStartTitleEdit}
+                className={clsx(
+                  "cursor-text text-base text-slate-100 transition",
+                  todo.completed ? "text-slate-500 line-through" : "",
+                )}
+                title="Clique duas vezes para editar"
+              >
+                {todo.content}
+              </p>
+            )}
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={isEditingTitle ? handleConfirmTitleEdit : handleStartTitleEdit}
+                className={clsx(
+                  "h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-slate-100",
+                  isEditingTitle ? "flex" : "hidden group-hover:flex",
+                )}
+                aria-label={isEditingTitle ? "Salvar novo título" : "Editar título"}
+              >
+                {isEditingTitle ? "✓" : "✎"}
+              </button>
+              {isEditingTitle && (
+                <button
+                  type="button"
+                  onClick={handleCancelTitleEdit}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-300 transition hover:bg-slate-700 hover:text-slate-100"
+                  aria-label="Cancelar edição do título"
+                >
+                  ↺
+                </button>
+              )}
               <button
                 type="button"
                 {...listeners}
                 {...attributes}
-                className="hidden h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-lg text-slate-300 transition group-hover:flex hover:bg-slate-700 hover:text-slate-100"
+                className={clsx(
+                  "h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-lg text-slate-300 transition hover:bg-slate-700 hover:text-slate-100",
+                  isEditingTitle ? "hidden" : "hidden group-hover:flex",
+                )}
                 aria-label="Reordenar tarefa"
               >
                 ☰
@@ -110,9 +199,7 @@ export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) 
               </button>
             </div>
           </div>
-          <span className="text-xs text-slate-500">
-            {new Date(todo.createdAt).toLocaleString()}
-          </span>
+          <span className="text-xs text-slate-500">{new Date(todo.createdAt).toLocaleString()}</span>
           {!open && todo.description && (
             <p className="max-h-24 overflow-hidden whitespace-pre-line break-words text-sm text-slate-400">
               {todo.description}
@@ -123,8 +210,8 @@ export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) 
       {open && (
         <div className="flex flex-col gap-3 border-t border-slate-800 pt-3">
           <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            value={descriptionDraft}
+            onChange={(event) => setDescriptionDraft(event.target.value)}
             placeholder="Adicione uma descrição detalhada"
             className="min-h-28 w-full resize-y rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-primary"
           />
@@ -142,15 +229,15 @@ export const TodoItem = ({ todo, onToggle, onRemove, onUpdate }: TodoItemProps) 
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={handleCancelDescription}
               className="rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 transition hover:text-slate-100"
             >
               Cancelar
             </button>
             <button
               type="button"
-              onClick={handleSave}
-              disabled={draft.trim() === todo.description.trim()}
+              onClick={handleSaveDescription}
+              disabled={descriptionDraft.trim() === todo.description.trim()}
               className="rounded-full bg-primary px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-950 transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
             >
               Salvar

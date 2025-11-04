@@ -9,7 +9,7 @@ type TodoListProps = {
   todos: Todo[];
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, changes: { description: string }) => void;
+  onUpdate: (id: string, changes: Partial<Pick<Todo, "content" | "description">>) => void;
   onReorder: (ids: string[]) => void;
 };
 

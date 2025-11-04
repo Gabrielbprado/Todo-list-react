@@ -3,6 +3,7 @@ import { FilterTabs } from "./components/FilterTabs";
 import { TodoForm } from "./components/TodoForm";
 import { TodoList } from "./components/TodoList";
 import { useTodos } from "./hooks/useTodos";
+import type { Todo } from "./types/todo";
 
 const suggestions = [
   "Organizar prioridades do dia",
@@ -14,7 +15,7 @@ const App = () => {
   const { filteredTodos, filter, setFilter, addTodo, toggleTodo, removeTodo, clearCompleted, updateTodo, reorderTodos, stats } = useTodos();
 
   const handleUpdate = useCallback(
-    (id: string, changes: { description: string }) => {
+    (id: string, changes: Partial<Pick<Todo, "content" | "description">>) => {
       updateTodo(id, changes);
     },
     [updateTodo],

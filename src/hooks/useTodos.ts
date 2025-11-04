@@ -72,7 +72,25 @@ export const useTodos = () => {
 
   const updateTodo = useCallback((id: string, changes: Partial<Pick<Todo, "content" | "description">>) => {
     setTodos((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+      current.map((item) => {
+        if (item.id !== id) return item;
+
+        const next = { ...item } as Todo;
+
+        if (Object.prototype.hasOwnProperty.call(changes, "content")) {
+          const trimmed = changes.content?.trim() ?? "";
+          if (!trimmed) {
+            return item;
+          }
+          next.content = trimmed;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(changes, "description")) {
+          next.description = changes.description?.trim() ?? "";
+        }
+
+        return next;
+      }),
     );
   }, []);
 
